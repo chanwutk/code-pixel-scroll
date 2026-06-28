@@ -1,0 +1,70 @@
+{
+  "name": "pixel-scroll-terminal",
+  "displayName": "Pixel Scroll Terminal",
+  "description": "Per-pixel (sub-line) smooth scrolling for the VS Code integrated terminal.",
+  "version": "0.0.1",
+  "publisher": "local",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "terminal",
+    "xterm",
+    "scroll",
+    "smooth scrolling",
+    "trackpad"
+  ],
+  "main": "./out/extension.js",
+  "extensionKind": [
+    "ui"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true
+    }
+  },
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "pixelScrollTerminal.enable",
+        "title": "Enable",
+        "category": "Pixel Scroll Terminal"
+      },
+      {
+        "command": "pixelScrollTerminal.disable",
+        "title": "Disable",
+        "category": "Pixel Scroll Terminal"
+      },
+      {
+        "command": "pixelScrollTerminal.reapply",
+        "title": "Reapply Patch",
+        "category": "Pixel Scroll Terminal"
+      },
+      {
+        "command": "pixelScrollTerminal.showStatus",
+        "title": "Show Status",
+        "category": "Pixel Scroll Terminal"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "check": "node --check scroll-logic.js && tsc --noEmit --allowJs --checkJs --strict --target ES2020 --lib ES2020,DOM --skipLibCheck scroll-logic.js",
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^2.24.0",
+    "typescript": "^5.4.0"
+  }
+}

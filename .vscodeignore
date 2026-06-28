@@ -1,0 +1,16 @@
+# Source & build config (not needed at runtime)
+src/**
+tsconfig.json
+**/*.ts
+out/**/*.map
+
+# Dev tooling / scratch
+.vscode/**
+.vscode-test/**
+node_modules/**
+.gitignore
+.git/**
+*.vsix
+.DS_Store
+
+# NOTE: scroll-logic.js is intentionally NOT ignored — the patcher reads it at runtime.
