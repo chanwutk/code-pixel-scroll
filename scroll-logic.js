@@ -14,6 +14,13 @@
  * `__pixelScrollHandleScroll` is only scaffolding that lets `tsc --checkJs`
  * type-check the body in isolation.
  *
+ * Performance notes (v2):
+ *   - `.xterm-screen` ships as plain `position: relative`, so a 2D transform is
+ *     not guaranteed its own compositor layer and each scroll can repaint the
+ *     canvas. We promote it once with `will-change: transform` and animate with
+ *     `translate3d(...)`, keeping every update on the GPU compositor only.
+ *   - We skip the style write when the sub-row offset is unchanged.
+ *
  * IMPORTANT constraints for the body (between the markers):
  *   - Use block comments only (no `//`) so it stays valid even on one line.
  *   - Keep it fully self-contained and wrapped in try/catch so a failure can
@@ -41,12 +48,13 @@
 
 /**
  * Minimal shape of the xterm Viewport (`this`) that our body touches.
- * `__pixelScrollScreen` is our own cache field added at runtime.
+ * `__pixelScroll*` are our own cache fields added at runtime.
  *
  * @typedef {Object} ViewportLike
  * @property {RenderServiceLike} _renderService
  * @property {ScrollableElementLike} _scrollableElement
  * @property {HTMLElement | null | undefined} __pixelScrollScreen
+ * @property {number | undefined} __pixelScrollLast
  */
 
 /**
@@ -70,10 +78,17 @@ function __pixelScrollHandleScroll(e) {
       if (!screenEl || !screenEl.isConnected) {
         screenEl = this.__pixelScrollScreen =
           this._scrollableElement.getDomNode().querySelector('.xterm-screen');
+        /* Force a write for a freshly (re)found element, and give it its own GPU layer
+           so subsequent transforms are compositor-only (no canvas repaint). */
+        this.__pixelScrollLast = NaN;
+        if (screenEl) {
+          screenEl.style.willChange = 'transform';
+        }
       }
-      /* Add the discarded fraction back as a compositor-only transform. */
-      if (screenEl) {
-        screenEl.style.transform = 'translateY(' + (-offset) + 'px)';
+      /* Add the discarded fraction back as a 3D (GPU-composited) transform; skip no-op writes. */
+      if (screenEl && offset !== this.__pixelScrollLast) {
+        this.__pixelScrollLast = offset;
+        screenEl.style.transform = 'translate3d(0,' + (-offset) + 'px,0)';
       }
     }
   } catch (_e) {

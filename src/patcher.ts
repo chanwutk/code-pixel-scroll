@@ -16,7 +16,7 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 
 /** Bump when the injected body changes; reconcile re-applies on mismatch. */
-export const SNIPPET_VERSION = 'v1';
+export const SNIPPET_VERSION = 'v2';
 
 /** Unique, byte-identical, post-guard splice anchor (verified: exactly 1 per build). */
 const ANCHOR = 'this._isHandlingScroll=!0;';

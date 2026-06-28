@@ -119,6 +119,24 @@ from writing the bundle). An orphaned patch is harmless — it is self-contained
 `try/catch`, keeps working, and is wiped automatically by the next VS Code update that replaces
 xterm — but disabling first keeps things tidy.
 
+## Performance
+
+`.xterm-screen` ships as plain `position: relative`, so a 2D transform isn't guaranteed its
+own compositor layer — each scroll could repaint the canvas. The patch therefore promotes the
+element once with `will-change: transform` and animates with `translate3d(…)`, keeping every
+update GPU-compositor-only, and it skips the style write when the sub-row offset is unchanged.
+
+For the best result, make sure the terminal is using the GPU (WebGL) renderer:
+
+```jsonc
+// settings.json
+"terminal.integrated.gpuAcceleration": "auto"  // or "on"
+```
+
+With the DOM renderer (`"off"`), the base render cost is much higher and no transform trick can
+fully hide it. (A sub-pixel transform also trades a touch of crispness for smoothness while in
+motion — that is inherent to the effect.)
+
 ## Known limitations
 
 - Up to a half-row sliver may briefly show at the very top/bottom **during** active scrolling
