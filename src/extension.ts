@@ -5,8 +5,9 @@
  * State: persisted in globalState; on activation we reconcile (re-apply if a
  * VS Code update replaced xterm or the snippet version changed).
  *
- * The patch only takes effect after a window reload (the old xterm .mjs is
- * already in memory), so each mutating action offers a dismissible reload.
+ * The patch only takes effect once the already-loaded xterm is dropped, so each
+ * mutating action offers a dismissible reload — or, on bundles that pack xterm
+ * into node_modules.asar, a full app restart (see `offerActivation`).
  */
 
 import * as vscode from 'vscode';
@@ -14,6 +15,7 @@ import {
   PatchManager,
   PatchError,
   SNIPPET_VERSION,
+  isTransientError,
   type FileResult,
   type FileStatus,
   type ApplyAction,
@@ -75,8 +77,33 @@ async function setState(context: vscode.ExtensionContext, state: State): Promise
   await context.globalState.update(STATE_KEY, state);
 }
 
-function offerReload(message: string): void {
-  void vscode.window.showInformationMessage(message, 'Reload Window').then(choice => {
+/**
+ * Prompt for whatever it takes to pick the change up.
+ *
+ * With plain files a window reload is enough: the renderer re-imports xterm.
+ * With `node_modules.asar` it is not — the app process caches the archive's
+ * header, so it keeps serving the pre-patch bytes until it is restarted.
+ */
+function offerActivation(mgr: PatchManager, message: string): void {
+  if (mgr.needsAppRestart()) {
+    const appName = vscode.env.appName;
+    void vscode.window
+      .showInformationMessage(
+        `${message} Quit and reopen ${appName} to pick it up — a window reload is not enough, ` +
+          'because the app process caches node_modules.asar.',
+        `Quit ${appName}`
+      )
+      .then(choice => {
+        if (choice === `Quit ${appName}`) {
+          void Promise.resolve(vscode.commands.executeCommand('workbench.action.quit')).then(
+            undefined,
+            err => log(`could not quit automatically: ${err instanceof Error ? err.message : String(err)}`)
+          );
+        }
+      });
+    return;
+  }
+  void vscode.window.showInformationMessage(`${message} Reload the window to pick it up.`, 'Reload Window').then(choice => {
     if (choice === 'Reload Window') {
       void vscode.commands.executeCommand('workbench.action.reloadWindow');
     }
@@ -91,6 +118,16 @@ function isPermissionError(err: unknown): err is PatchError {
 }
 
 function handleError(err: unknown, retry: () => void): void {
+  if (isTransientError(err)) {
+    const message = err instanceof Error ? err.message : String(err);
+    log(`transient: ${message}`);
+    void vscode.window.showWarningMessage(`Pixel Scroll Terminal: ${message}`, 'Try Again').then(choice => {
+      if (choice === 'Try Again') {
+        retry();
+      }
+    });
+    return;
+  }
   if (isPermissionError(err)) {
     const appName = vscode.env.appName;
     log(`Permission denied (${err.code}) modifying ${appName}: ${err.message}`);
@@ -146,14 +183,14 @@ function applyAndReport(context: vscode.ExtensionContext, force: boolean): void 
   if (patchable.length === 0) {
     const msg =
       'Pixel Scroll Terminal: no patchable xterm found in this editor ' +
-      '(file missing or its scroll handler changed). No changes made.';
+      `(looked in ${mgr.location()}; file missing or its scroll handler changed). No changes made.`;
     log(msg);
     void vscode.window.showWarningMessage(msg);
     return;
   }
 
   if (results.some(r => r.changed)) {
-    offerReload('Pixel Scroll Terminal enabled. Reload the window to start smooth scrolling.');
+    offerActivation(mgr, 'Pixel Scroll Terminal enabled.');
   } else {
     void vscode.window.showInformationMessage('Pixel Scroll Terminal is already enabled and up to date.');
   }
@@ -171,7 +208,7 @@ function disableCmd(context: vscode.ExtensionContext): void {
       return;
     }
     if (results.some(r => r.changed)) {
-      offerReload('Pixel Scroll Terminal disabled. Reload the window to restore default scrolling.');
+      offerActivation(mgr, 'Pixel Scroll Terminal disabled.');
     } else {
       void vscode.window.showInformationMessage('Pixel Scroll Terminal was not applied; nothing to remove.');
     }
@@ -209,11 +246,16 @@ function reconcile(context: vscode.ExtensionContext): void {
   try {
     results = mgr.apply();
   } catch (err) {
+    if (isTransientError(err)) {
+      // Another window is doing exactly this; it does not need saying twice.
+      log(`reconcile: deferring — ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
     handleError(err, () => reconcile(context));
     return;
   }
   if (results.some(r => r.changed)) {
-    offerReload('Pixel Scroll Terminal re-applied after an editor update. Reload the window to re-enable smooth scrolling.');
+    offerActivation(mgr, 'Pixel Scroll Terminal re-applied after an editor update.');
   }
 }
 
@@ -224,6 +266,8 @@ function showStatusCmd(context: vscode.ExtensionContext): void {
   output.appendLine('=== Pixel Scroll Terminal — Status ===');
   output.appendLine(`Editor:           ${vscode.env.appName}`);
   output.appendLine(`appRoot:          ${vscode.env.appRoot}`);
+  output.appendLine(`Bundle layout:    ${mgr.layout()}`);
+  output.appendLine(`Patch target:     ${mgr.location()}`);
   output.appendLine(`xterm version:    ${mgr.detectXtermVersion() ?? 'unknown'}`);
   output.appendLine(`Current snippet:  ${SNIPPET_VERSION}`);
   output.appendLine(`Stored state:     enabled=${state.enabled}, snippetVersion=${state.snippetVersion || '(none)'}`);

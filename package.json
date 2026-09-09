@@ -2,7 +2,7 @@
   "name": "pixel-scroll-terminal",
   "displayName": "Pixel Scroll Terminal",
   "description": "Per-pixel (sub-line) smooth scrolling for the VS Code integrated terminal.",
-  "version": "0.0.2",
+  "version": "0.0.5",
   "publisher": "local",
   "license": "MIT",
   "engines": {
